@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10年日記</title>
+
+  <!-- ===== CSS：見た目 ===== -->
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #1a1a1f;   /* 暗い背景 */
+      color: #e8e6e3;        /* 明るい文字 */
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 1.4rem;
+    }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    button {
+      font-size: 1rem;
+      padding: 8px 12px;
+      cursor: pointer;
+      background: #2c2c35;
+      color: #e8e6e3;
+      border: 1px solid #44444f;
+      border-radius: 6px;
+    }
+    button:hover {
+      background: #3a3a46;
+    }
+    .tools {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #44444f;
+    }
+    .tools button {
+      margin-right: 8px;
+    }
+    #message {
+      margin: 8px 0 0;
+      min-height: 1.2em;
+      font-size: 0.9rem;
+    }
+    #today {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+    .entry {
+      margin-bottom: 16px;
+    }
+    .entry label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    textarea {
+      width: 100%;
+      height: 90px;
+      font-size: 1rem;
+      padding: 8px;
+      box-sizing: border-box;
+      background: #24242b;
+      color: #e8e6e3;
+      border: 1px solid #44444f;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== HTML：置くもの ===== -->
+  <!-- バックアップ用のボタン（一番上） -->
+  <div class="tools">
+    <button id="export">📤 バックアップを書き出す</button>
+    <button id="import">📥 読み込む</button>
+    <!-- ファイルを選ぶ部品。見せずに、上のボタンから動かす -->
+    <input type="file" id="file" accept=".json" hidden>
+    <p id="message"></p>
+  </div>
+
+  <h1>10年日記</h1>
+
+  <!-- 前の日・日付・次の日 を横に並べる -->
+  <div class="nav">
+    <button id="prev">◀ 前の日</button>
+    <span id="today"></span>
+    <button id="next">次の日 ▶</button>
+  </div>
+
+  <!-- 10年分の入力欄は、JavaScriptがここに作る -->
+  <div id="entries"></div>
+
+  <!-- ===== JavaScript：動き ===== -->
+  <script>
+    // 1. 「いま表示している日」を覚えておく変数。最初は今日。
+    let current = new Date();
+
+    // 2. よく使う場所に名前をつけて探しておく
+    const entries = document.getElementById("entries");
+    const todayLabel = document.getElementById("today");
+
+    // 3. 画面を作る係（関数）。何回でも呼び出せる。
+    //    日付が変わるたびに、これを呼んで10個の枠を作り直す。
+    function render() {
+      const thisYear = current.getFullYear();
+      const month = current.getMonth() + 1;
+      const day = current.getDate();
+
+      todayLabel.textContent = month + "月" + day + "日";
+
+      // 前の枠を全部消してから、作り直す
+      entries.innerHTML = "";
+
+      for (let i = 0; i < 10; i++) {
+        const year = thisYear - i;
+        const key = "diary-" + year + "-" + month + "-" + day;
+
+        const box = document.createElement("div");
+        box.className = "entry";
+
+        const label = document.createElement("label");
+        label.textContent = year + "年";
+
+        const textarea = document.createElement("textarea");
+        textarea.placeholder = year + "年" + month + "月" + day + "日のできごと";
+
+        const saved = localStorage.getItem(key);
+        if (saved !== null) {
+          textarea.value = saved;
+        }
+
+        textarea.addEventListener("input", function () {
+          localStorage.setItem(key, textarea.value);
+        });
+
+        box.appendChild(label);
+        box.appendChild(textarea);
+        entries.appendChild(box);
+      }
+    }
+
+    // 4. ボタンが押されたときの動き
+    document.getElementById("prev").addEventListener("click", function () {
+      current.setDate(current.getDate() - 1);  // 1日戻す（月またぎも自動で計算）
+      render();                                  // 画面を作り直す
+    });
+
+    document.getElementById("next").addEventListener("click", function () {
+      current.setDate(current.getDate() + 1);  // 1日進める
+      render();
+    });
+
+    // ===== ここからバックアップ =====
+    const message = document.getElementById("message");
+    const fileInput = document.getElementById("file");
+
+    // A. 書き出し：保管庫の中の日記を全部集めて、ファイルにする
+    document.getElementById("export").addEventListener("click", function () {
+      const data = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k.startsWith("diary-")) {          // 日記の名札だけ集める
+          data[k] = localStorage.getItem(k);
+        }
+      }
+      const text = JSON.stringify(data, null, 2);   // 文字の形に変換
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      const t = new Date();
+      a.download = "diary-backup-" + t.getFullYear() + "-" + (t.getMonth() + 1) + "-" + t.getDate() + ".json";
+      a.click();                                    // ダウンロード開始
+      URL.revokeObjectURL(url);
+
+      message.textContent = Object.keys(data).length + "日分を書き出しました";
+    });
+
+    // B. 読み込み：ボタンを押したらファイル選択を開く
+    document.getElementById("import").addEventListener("click", function () {
+      fileInput.click();
+    });
+
+    // ファイルが選ばれたら、中身を読んで保管庫に戻す
+    fileInput.addEventListener("change", function () {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          const data = JSON.parse(reader.result);
+          let count = 0;
+          for (const k in data) {
+            if (k.startsWith("diary-")) {
+              localStorage.setItem(k, data[k]);
+              count++;
+            }
+          }
+          message.textContent = count + "日分を読み込みました";
+          render();                                  // 画面を作り直して反映
+        } catch (e) {
+          message.textContent = "読み込めませんでした。バックアップのファイルか確認してね";
+        }
+        fileInput.value = "";                        // 同じファイルをもう一回選べるように
+      };
+      reader.readAsText(file);
+    });
+
+    // 5. 最初に1回、画面を作る
+    render();
+  </script>
+
+</body>
+</html>
